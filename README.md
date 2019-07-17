@@ -2,7 +2,7 @@
 Maix-EMC: Embedded/Edge Model Convertor, convert NN model for embedded systems
 
 
-Maix-EMC act as **TensorLayer**（[https://github.com/tensorlayer/tensorlayer](https://github.com/tensorlayer/tensorlayer)）plugin, convert TensorLayer Model to kmodel.
+Maix-EMC act as **TensorLayer**（[https://github.com/tensorlayer/tensorlayer](https://github.com/tensorlayer/tensorlayer)）plugin, convert TensorLayer Model to kmodel, see [TensorLayer Model Architecture](https://tensorlayer.readthedocs.io/en/latest/user/get_start_model.html#print-model-information) for more information.
 
 
 **Kmodel** is an flatten embedded Model format, currently used on Maix K210 boards, but it is also possible to run on normal MCU by using corresponding driver.
