@@ -61,17 +61,21 @@ from .k210.k210_kmodel_bin import gen_kmodel
 
 tl_to_k210_table= {
 #   TL layer class          layer_generator     merge
-    'Dense'                 :[gen_fc_layer,         []] ,
-    'Flatten'               :[gen_flatten_layer,    []] ,
-    'Reshape'               :[None,                 []] ,
-    'GlobalMaxPool2d'       :[gen_gmaxpool2d_layer, []] ,
-    'GlobalMeanPool2d'      :[gen_gavgpool2d_layer, []] ,
-    'MaxPool2d'             :[gen_maxpool2d_layer,  []] ,
-    'MeanPool2d'            :[gen_avgpool2d_layer,  []] ,
-    'Concat'                :[gen_concat_layer,     []] ,
-    'Conv2d'                :[gen_k210_conv_layer,  [['BatchNorm'],]] ,
-    'DepthwiseConv2d'       :[gen_k210_conv_layer,  [['BatchNorm'],]] ,
-    'DummyDequant'          :[gen_dequant_layer,    []] ,  
+    'Dense'                 :[gen_fc_layer,         [[],]] ,
+    'Flatten'               :[gen_flatten_layer,    [[],]] ,
+    'Reshape'               :[None,                 [[],]] ,
+    'GlobalMaxPool2d'       :[gen_gmaxpool2d_layer, [[],]] ,
+    'GlobalMeanPool2d'      :[gen_gavgpool2d_layer, [[],]] ,
+    'MaxPool2d'             :[gen_maxpool2d_layer,  [[],]] ,
+    'MeanPool2d'            :[gen_avgpool2d_layer,  [[],]] ,
+    'Concat'                :[gen_concat_layer,     [[],]] ,
+    'Conv2d'                :[gen_k210_conv_layer,  [[], ['BatchNorm'],]] ,
+    'DepthwiseConv2d'       :[gen_k210_conv_layer,  [[], ['BatchNorm'],]] ,
+    'ZeroPad2d'             :[gen_k210_conv_layer,  [['Conv2d'], \
+                                                     ['Conv2d', 'BatchNorm'], \
+                                                     ['DepthwiseConv2d'], \
+                                                     ['DepthwiseConv2d', 'BatchNorm']]] ,
+    'DummyDequant'          :[gen_dequant_layer,    [[],]] ,  
 }
 
 
@@ -102,6 +106,7 @@ def try_match_layer_type(layers, idx, match_table):
         #try all layer list belong to this k210 layer type
         for tl_type_list in  tl_type_lists:    
             if len(tl_type_list) == 0:
+                list_result.append(tl_type_list)
                 continue
             match_flag = True
             for i in range(len(tl_type_list)):  #match tl layer type in list
@@ -113,7 +118,7 @@ def try_match_layer_type(layers, idx, match_table):
             if match_flag:
                 list_result.append(tl_type_list)
         if len(list_result) == 0:               #no match tl layer type list
-            return gen_func, [tl_type]
+            return None, []
             
         max_len_idx = 0
         max_len = 0
@@ -122,13 +127,14 @@ def try_match_layer_type(layers, idx, match_table):
                 max_len = len(list_result[i])
                 max_len_idx = i                 #return max len match result
         tl_type_list = [tl_type]
-        tl_type_list.extend(list_result[max_len_idx])
+        if max_len != 0:
+            tl_type_list.extend(list_result[max_len_idx])
         return gen_func, tl_type_list
     else:
         return None, []
 
 
-# gen layer list logging.debug
+# gen layer list logging.info
 def gen_tl_type_list(layers, idx):
     type_list=[]
     for i in range(idx, len(layers)):
@@ -153,7 +159,7 @@ def gen_edge_layer_from_network(network, platform, meta_info, idx):
         logging.error("[*] This layer sequence not support: {}".format(type_list))
         raise RuntimeError("not support this layer sequence !")
         
-    logging.debug("This layerlist len = %d"%(len(tl_type_list)))
+    logging.info("This layerlist len = %d"%(len(tl_type_list)))
     for i in range(len(tl_type_list)):
         logging.info("[TL layer %d]: %s"%(idx+i, network.all_layers[idx+i].layer_args['name']))
     
@@ -169,11 +175,11 @@ def gen_edge_layer_from_network(network, platform, meta_info, idx):
 
 # combine duplicate layers  
 def optimize_layers(el_list):
-    logging.debug(' ')
-    logging.debug(' ')
-    logging.debug('='*27+'Layer List before optimize'+'='*27)
+    logging.info(' ')
+    logging.info(' ')
+    logging.info('='*27+'Layer List before optimize'+'='*27)
     for i in range(len(el_list)):
-        logging.debug("Layer %3d: %s"%(i,el_list[i].typename))
+        logging.info("Layer %3d: %s"%(i,el_list[i].typename))
     
     if len(el_list) <= 1:
         return
@@ -188,10 +194,10 @@ def optimize_layers(el_list):
            continue
         i += 1
 
-    logging.debug('='*27+'Layer List after optimize '+'='*27)
+    logging.info('='*27+'Layer List after optimize '+'='*27)
     for i in range(len(el_list)):
-        logging.debug("Layer %3d: %s"%(i,el_list[i].typename))
-    logging.debug('='*80)
+        logging.info("Layer %3d: %s"%(i,el_list[i].typename))
+    logging.info('='*80)
     
 #gen edge layers info
 def gen_edge_layers_from_network(network, platform, dataset, quant_func, quant_bit=8):
@@ -245,11 +251,11 @@ def gen_edge_layers_from_network(network, platform, dataset, quant_func, quant_b
 
 def available_platform():
     for item in platform_table:
-        logging.debug("######"+item)
-        logging.debug("support layer type:")
+        logging.info("######"+item)
+        logging.info("support layer type:")
         table = platform_table[item][0]
         for layer in table:
-            logging.debug(layer)
+            logging.info(layer)
 
 
 # gen edge model from network

@@ -34,7 +34,7 @@ def load_img_0_1(dataset_dir, w, h, ch):
     if os.path.isdir(dataset_dir):
         all_files = os.listdir(dataset_dir)
         if len(all_files) > 128:
-            logging.debug("[*] too many data in dataset, we random choose 128 datas {}")
+            logging.info("[*] too many data in dataset, we random choose 128 datas {}")
             all_files = random.sample(all_files, 128)  # set maxmum dataset size
 
         dataset_file_list = [
@@ -72,7 +72,7 @@ def loader_func_byname(name):
 
 def available_loader():
 	for item in loader_func_name_dict:
-		logging.debug(item)
+		logging.info(item)
     
     
     

@@ -108,28 +108,33 @@ def gen_layer_struct(elayer, idx):
     img_output_size = int(math.ceil(io_arg['o_ch_num'] / io_arg['wb_group']) * 64 * io_arg['wb_channel_switch_addr'])
 
     assert (img_input_size + img_output_size <= img_ram_size)
-
+    
+    logging.debug("----KPU Register Config Info----")
     interrupt_enabe = {
         'int_en': set_to_zero,
         'ram_flag': reserved,
         'full_add': set_to_zero,
         'depth_wise_layer': conv_arg['depth_wise_layer']
     }
+    logging.debug("       {}".format(interrupt_enabe))
     image_addr = {
         'image_src_addr': hex(int((0 if not idx & 1 else (img_ram_size - img_input_size)) / 64)),
         'image_dst_addr': hex(int((0 if idx & 1 else (img_ram_size - img_output_size)) / 64))
     }
+    logging.debug("       {}".format(image_addr))
     image_channel_num = {
         'i_ch_num': hex(io_arg['i_ch_num'] - 1),
         'o_ch_num': hex(io_arg['o_ch_num'] - 1),
         'o_ch_num_coef': hex(conv_arg['o_ch_num_coef'] - 1),
     }
+    logging.debug("       {}".format(image_channel_num))
     image_size = {
         'i_row_wid': hex(conv_arg['i_row_wid'] - 1),
         'i_col_high': hex(conv_arg['i_col_high'] - 1),
         'o_row_wid': hex(io_arg['o_row_wid'] - 1),
         'o_col_high': hex(io_arg['o_col_high'] - 1),
     }
+    logging.debug("       {}".format(image_size))
     kernel_pool_type_cfg = {
         'kernel_type': conv_arg['kernel_type'],
         'pad_type': conv_arg['pad_type'],
@@ -141,16 +146,38 @@ def gen_layer_struct(elayer, idx):
         'pad_value': signed_to_hex(conv_arg['pad_value'], 8),
         'bwsx_base_addr': bn_arg['bwsx_base_addr'],
     }
+    
+    kernel_pool_type_cfg_print = {
+        'kernel_type': conv_arg['kernel_type'],
+        'pad_type': conv_arg['pad_type'],
+        'pool_type': pool_arg['pool_type'],
+        'first_stride': conv_arg['first_stride'],
+        'bypass_conv': 0 if elayer.conv else 1,
+        'load_para': bn_arg['load_para'],
+        'dma_burst_size': io_arg['dma_burst_size'],
+        'pad_value': signed_to_hex(conv_arg['pad_value'], 8),
+        'bwsx_base_addr': 'too many content',
+    }
+    logging.debug("       {}".format(kernel_pool_type_cfg_print))
     kernel_load_cfg = {
         'load_coor': conv_arg['load_coor'],
         'load_time': conv_arg['load_time'] - 1,
         'para_size': conv_arg['para_size'],
         'para_start_addr': conv_arg['para_start_addr'],
     }
+    
+    kernel_load_cfg_print = {
+        'load_coor': conv_arg['load_coor'],
+        'load_time': conv_arg['load_time'] - 1,
+        'para_size': conv_arg['para_size'],
+        'para_start_addr': 'too many content',
+    }
+    logging.debug("       {}".format(kernel_load_cfg_print))
     kernel_offset = {
         'coef_column_offset': set_to_zero,
         'coef_row_offset': set_to_zero,
     }
+    logging.debug("       {}".format(kernel_offset))
     kernel_calc_type_cfg = {
         'channel_switch_addr': hex(conv_arg['channel_switch_addr']),
         'row_switch_addr': hex(conv_arg['row_switch_addr']),
@@ -159,25 +186,39 @@ def gen_layer_struct(elayer, idx):
         'load_act': 1 if elayer.act else 0,
         'active_addr': act_arg['active_addr']
     }
+    
+    kernel_calc_type_cfg_print = {
+        'channel_switch_addr': hex(conv_arg['channel_switch_addr']),
+        'row_switch_addr': hex(conv_arg['row_switch_addr']),
+        'coef_size': reserved,
+        'coef_group': conv_arg['coef_group'],
+        'load_act': 1 if elayer.act else 0,
+        'active_addr': 'too many content'
+    }
+    logging.debug("       {}".format(kernel_calc_type_cfg_print))
     write_back_cfg = {
         'wb_channel_switch_addr': hex(io_arg['wb_channel_switch_addr']),
         'wb_row_switch_addr': hex(io_arg['wb_row_switch_addr']),
         'wb_group': io_arg['wb_group']
     }
+    logging.debug("       {}".format(write_back_cfg))
     conv_value = {
         'shr_w': conv_arg['shr_w'],
         'shr_x': conv_arg['shr_x'],
         'arg_w': signed_to_hex(conv_arg['arg_w'], 24),
         'arg_x': signed_to_hex(conv_arg['arg_x'], 24),
     }
+    logging.debug("       {}".format(conv_value))
     conv_value2 = {
         'arg_add': int(round(conv_arg['arg_add'])),
     }
+    logging.debug("       {}".format(conv_value2))
     dma_parameter = {
         'send_data_out': io_arg['send_data_out'],
         'channel_byte_num': io_arg['channel_byte_num'] - 1,
         'dma_total_byte': io_arg['dma_total_byte'] - 1,
     }
+    logging.debug("       {}".format(dma_parameter))
 
     return {
         'interrupt_enabe': interrupt_enabe,
@@ -199,7 +240,7 @@ def gen_layer_code(elayer_struct, layer_cfg):
     for reg_name, data in elayer_struct[0].items():
         value = 0
         for filed_name, filed_value in data.items():
-            #logging.debug("  %s: %s"%(filed_name, filed_value))
+            #logging.info("  %s: %s"%(filed_name, filed_value))
             if isinstance(filed_value, int):
                 pass
             elif isinstance(filed_value, str):
@@ -208,7 +249,6 @@ def gen_layer_code(elayer_struct, layer_cfg):
                 filed_value = 0
             value |= (filed_value << kpu_layer_config_field_offset[reg_name][filed_name])
         value&=0xffffffffffffffff
-        #logging.debug("%s : %x"%(reg_name, value))
         layer_cfg.reg_arg[kpu_layer_config_reg_offset[reg_name]*8:kpu_layer_config_reg_offset[reg_name]*8+8] = value.to_bytes(8, 'little')
 
 
@@ -288,7 +328,7 @@ class K210Conv:
 
         if self.input_shape[1] < 4:
             tensor_height = self.input_shape[1]
-            logging.debug('[error] feature map required height>4 which this layer height is {}' \
+            logging.info('[error] feature map required height>4 which this layer height is {}' \
                   .format(tensor_height))
             self.input_shape = list(self.input_shape)
             self.output_shape = list(self.output_shape)
@@ -298,9 +338,9 @@ class K210Conv:
             self.output_shape[1:3] = [4, 4]
             notice = 'this layer heigh-width MUST padding from {}x{}=>{}x{} to 4x4=>4x4 in CPU before continue.' \
                 .format(*old_input_wh, *old_output_wh)
-            logging.debug('[notice] ' + ('=' * 71))
-            logging.debug('[notice] ' + notice)
-            logging.debug('[notice] ' + ('=' * 71))
+            logging.info('[notice] ' + ('=' * 71))
+            logging.info('[notice] ' + notice)
+            logging.info('[notice] ' + ('=' * 71))
             raise ValueError('conv height must > 4' )
 
     @staticmethod
@@ -442,24 +482,24 @@ class K210BN:
         }
 
     def to_kmodel_param(self, swsx=1):
-        #logging.debug("mean:{}, var={}, gamma={}, beta={}".format(self.mean, self.var, self.gamma, self.beta))
+        #logging.info("mean:{}, var={}, gamma={}, beta={}".format(self.mean, self.var, self.gamma, self.beta))
         rsqrt_var = 1.0 / np.sqrt(self.var + self.epsilon)
-        #logging.debug("rsqrt_var={}".format(rsqrt_var))
+        #logging.info("rsqrt_var={}".format(rsqrt_var))
         scale = self.gamma * rsqrt_var  #8.775
-        #logging.debug("scale={}".format(scale))
+        #logging.info("scale={}".format(scale))
         bias = self.beta - self.gamma * self.mean * rsqrt_var
-        #logging.debug("bias={}".format(bias))
-        #logging.debug("swsx=%f"%swsx)
+        #logging.info("bias={}".format(bias))
+        #logging.info("swsx=%f"%swsx)
         
         # todo: rewrite this, make max_abs mul is +-(1<<N)
         # now we need convert bias from float to 36bit int
         bmax = max(abs(np.min(scale)), abs(np.max(scale)))
-        #logging.debug("bmax=%f"%bmax)
+        #logging.info("bmax=%f"%bmax)
         brange = bmax
         sb = brange / 255
-        #logging.debug("sb=%f"%sb)
+        #logging.info("sb=%f"%sb)
         swsxsb = swsx * sb # todo: fix this range,  this is tooo small for python
-        #logging.debug("swsxsb=%f"%swsxsb)
+        #logging.info("swsxsb=%f"%swsxsb)
         # here is total shift and mul, we divide them into bn and act's shift
         # 35, 10909.xx   float_res = int_res*10909.xx>>35
         # pow_next_log_of_2_no_round, split swsxsb to out_mul and out_shift(which>=15)
@@ -470,7 +510,7 @@ class K210BN:
         # split float out_mul to int out_mul and 2 power
         # float_res = int_res*post_scale>>act_shift >>bn_shift 
         post_scale = out_mul / np.round(out_mul) * np.power(2, act_shift)
-        #logging.debug("act_shift=%d, post_scale=%f"%(act_shift,post_scale))
+        #logging.info("act_shift=%d, post_scale=%f"%(act_shift,post_scale))
 
         # scale scale to 0~255, and then* out_mul, >> 15, next step will /post_scale
         scale = (scale / sb * out_mul).round().astype('int32')
@@ -481,8 +521,8 @@ class K210BN:
             self.get_bn(s, b)
             for s, b in zip(scale, bias)
         ]
-        #logging.debug(scale)
-        #logging.debug(bias)
+        #logging.info(scale)
+        #logging.info(bias)
         return locals()
 
 
@@ -582,8 +622,8 @@ class K210Act:
             return xfy, yf_q, dydx_fix              # xstart, y bias, y_mul>>shift
 
         act_table = [(0x800000000, 0, 0)] + [act_table_aux(x, y, dydx) for x, y, dydx in act_table]
-        #logging.debug(act_table)
-        #logging.debug("miny=%f,maxy=%f"%(min_y,max_y))
+        #logging.info(act_table)
+        #logging.info("miny=%f,maxy=%f"%(min_y,max_y))
         def ret_aux(x, y, dydx):
             dxss, dys = K210Act.find_shift(dydx)
             assert (dys >= 0)
@@ -711,12 +751,7 @@ class K210_Conv_Layer:
             yield iter[ndx:min(ndx + n, l)]
 
     def to_kmodel_io_param(self):
-        if self.pool is not None:
-            output_shape = list(self.conv.output_shape)
-            output_shape[1] = int(math.floor(self.conv.output_shape[1] / self.pool.stride))
-            output_shape[2] = int(math.floor(self.conv.output_shape[2] / self.pool.stride))
-        else:
-            output_shape = self.conv.output_shape
+        output_shape = self.conv.output_shape
 
         weights_shape = self.conv.weights_shape
         input_shape = self.conv.input_shape
@@ -777,8 +812,8 @@ class K210_Conv_Layer:
         layer_header.type = EL_K210_CONV
         layer_header.body_size = len(layer_bin)
         
-        logging.debug("###K210 Conv Layer @0x%x"%arg_oft)
-        logging.debug("layer_offset=0x%x, weights_offset=0x%x, bn_offset=0x%x, act_offset=0x%x"%(layer.layer_offset, layer.weights_offset, layer.bn_offset, layer.act_offset))
+        logging.info("###K210 Conv Layer @0x%x"%arg_oft)
+        logging.info("layer_offset=0x%x, weights_offset=0x%x, bn_offset=0x%x, act_offset=0x%x"%(layer.layer_offset, layer.weights_offset, layer.bn_offset, layer.act_offset))
         
         return layer_header, layer_bin, buf_map, (output_scale, output_bias)
         
@@ -898,8 +933,13 @@ class AddPadding_Layer:
         layer_body = cparser.kpu_model_add_padding_layer_argument_t()    
         # fill layer body
         layer_body.flags                = 0
-        buf_map, layer_body.main_mem_in_address, layer_body.mem_out_address = \
+        _, layer_body.main_mem_in_address, _ = \
             cal_in_out_addr(buf_map, self.outsize)
+        layer_body.kpu_mem_out_address  = 0
+        
+        buf_map['pingpong']             = 0
+        buf_map['last_addr']            = 0
+        
         layer_body.channels             = self.channels
         # fill header
         layer_header.type               = EL_K210_ADD_PADDING
@@ -926,7 +966,7 @@ class RemovePadding_Layer:
         layer_body = cparser.kpu_model_remove_padding_layer_argument_t()    
         # fill layer body
         layer_body.flags                = 0
-        buf_map, layer_body.main_mem_in_address, layer_body.mem_out_address = \
+        buf_map, layer_body.main_mem_in_address, layer_body.main_mem_out_address = \
             cal_in_out_addr(buf_map, self.outsize)
         layer_body.channels             = self.channels
         # fill header
@@ -947,11 +987,28 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
         bias = minv
         return scale, bias  
     layer_list = []
-    if (tl_type_list[0] != 'Conv2d') and (tl_type_list[0] != 'DepthwiseConv2d'):
-        raise ValueError('wrong tl_type come into gen_conv_layer %s!'%(tl_type_list[0] ))
-    
     layers = network.all_layers  
-    conv_layer = layers[idx]    
+    
+    #check if the padding is right
+    if (tl_type_list[0] == 'ZeroPad2d'):    
+        zeropad_layer = layers[idx]
+        if zeropad_layer.layer_args['padding'] != ((1, 1), (1, 1)):
+            raise ValueError('K210 assume use ((1, 1), (1, 1)) zero padding!' )
+        idx += 1                        # skip the padding layer
+        conv_layer = layers[idx]
+        padding = conv_layer.layer_args['padding'] 
+        strides = conv_layer.layer_args['strides'] 
+        if padding != 'VALID':
+            raise ValueError("K210 assume conv layer after zeropad use padding = 'VALID'" )
+        if strides != (2, 2):
+            raise ValueError("K210 assume conv layer after zeropad use strides = (2,2)" )
+    else:
+        conv_layer = layers[idx]
+        padding = conv_layer.layer_args['padding'] 
+        strides = conv_layer.layer_args['strides'] 
+        if strides != (1, 1):
+            raise ValueError("K210 assume conv layer which stride > (1,1) use ZeroPad2d ahead " )
+        
     if len(tl_type_list)>1 :
         bn_layer = layers[idx+1]
     else:
@@ -972,6 +1029,11 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
     conved_shape = conv_layer._nodes[0].out_tensors[0].shape
     output_shape = conved_shape
     
+    if (tl_type_list[0] == 'ZeroPad2d'):    #strip 
+        input_shape = input_shape.as_list()
+        input_shape[1] -= 2
+        input_shape[2] -= 2
+    
     if len(input_shape) != 4:
         raise ValueError('K210 only support 4-d input tensor!')
     if input_shape[3] > 1024:
@@ -979,7 +1041,7 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
     
     small_conv_flag = 0
     if input_shape[2] < 4 or input_shape[1] < 4:
-        logging.debug("too small conv, padding it first!")
+        logging.info("too small conv, padding it first!")
         small_conv_flag = 1
         addpadding_layer = AddPadding_Layer(network, idx, tl_type_list, meta_info)
         input_shape0 = input_shape
@@ -1060,13 +1122,12 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
             output_en = True
     
     if small_conv_flag == 1:    #TODO: need download to cpu ram first
-        logging.debug("samll conv, need padding, conv_idx reset to 0")
+        logging.info("samll conv, need padding, conv_idx reset to 0")
         meta_info['conv_idx'] = 0
     else:   #k210 
         if meta_info['is_inai'] == False:  #not in ai ram, we need upload it first
-            logging.debug("need upload, conv_idx reset to 0")
+            logging.info("need upload, conv_idx reset to 0")
             meta_info['conv_idx'] = 0
-    
     kl_args = {
         'iwo_minmax': [meta_info['last_min'], meta_info['last_max'], weights_min, weights_max, act_min_y, act_max_y],
         'ico_shapes': [input_shape, conved_shape, output_shape],
@@ -1081,7 +1142,7 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
     # fix some critical condition
     kl_args_fixed = k210_layer_post_fix(kl_args)
     
-    # logging.debug layer info
+    # logging.info layer info
     output_min = act_min_y
     output_max = act_max_y
     layer_shape_trans = [
@@ -1092,13 +1153,13 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
         output_name = bn_layer.layer_args['name']
     else:
         output_name = conv_layer.layer_args['name']
-    logging.debug("in min:%f, max:%f;  out min %f, max: %f"%(meta_info['last_min'], meta_info['last_max'], output_min, output_max))
+    logging.info("in min:%f, max:%f;  out min %f, max: %f"%(meta_info['last_min'], meta_info['last_max'], output_min, output_max))
     input_scale, input_bias = min_max_to_scale_bias(meta_info['last_min'], meta_info['last_max'])
     output_scale, output_bias = min_max_to_scale_bias(output_min, output_max)
 
-    logging.debug("**********gen_conv_layer")
-    logging.debug('     shape(HWC): {}x{}x{} ==> {}x{}x{}'.format(*layer_shape_trans))
-    logging.debug('     scale,bias: ({},{}) ==> ({},{})'.format(input_scale, input_bias, output_scale, output_bias))
+    logging.info("**********gen_conv_layer")
+    logging.info('     shape(HWC): {}x{}x{} ==> {}x{}x{}'.format(*layer_shape_trans))
+    logging.info('     scale,bias: ({},{}) ==> ({},{})'.format(input_scale, input_bias, output_scale, output_bias))
     
     #convert to k210 layer
     kconv_layer = K210_Conv_Layer(**kl_args)

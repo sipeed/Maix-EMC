@@ -83,25 +83,26 @@ def gen_kmodel(elayers, version, quant_bit):
         memsize[idx] = elayer.memsize
         if memsize[idx] > max_mem_usage:  #TODO: not support branch
             max_mem_usage = memsize[idx]
-    buf_map = [max_mem_usage, 0, 0]
+    buf_map = {'bufsize':max_mem_usage, 'pingpong':0, 'last_addr':0}
+  
             
     for idx in range(layer_number):
         elayer = elayers[idx]
-        logging.debug(" ")
-        logging.debug("generate layer %d: %s"%(idx, elayer.typename))
+        logging.info(" ")
+        logging.info("generate layer %d: %s"%(idx, elayer.typename))
         logging.debug("buf_map={}".format(buf_map))
         layer_headers[idx], layers_bin[idx], buf_map, layers_misc[idx]= \
             elayer.to_kmodel(arg_oft, eight_bit_mode, buf_map)
-        #logging.debug(layers_bin[idx])
+        #logging.info(layers_bin[idx])
         arg_oft += len(layers_bin[idx])
 
     
     #fill output info
     for i in range(output_number):
-        outputs[i].address = buf_map[2]              #oft to main_buffer
+        outputs[i].address = buf_map['last_addr']              #oft to main_buffer
         outputs[i].size = elayers[layer_number-1].outsize
     #update max mem usage
-    logging.debug("max_mem_usage=%d Byte, %d KB"%(max_mem_usage, max_mem_usage//1024))
+    logging.info("max_mem_usage=%d Byte, %d KB"%(max_mem_usage, max_mem_usage//1024))
     header.main_mem_usage = max_mem_usage   #TODO
 
     #combine the kmodel bin

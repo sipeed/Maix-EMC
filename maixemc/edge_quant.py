@@ -144,7 +144,7 @@ def QuantKLD(network, layer, dataset, is_weights=False):
 
                 kld = scipy.stats.entropy(P, Q)
 
-                # logging.debug((j,i), kld, (j + 0.5) * delta + (min_val - delta), (i + 0.5) * delta + (min_val - delta))
+                # logging.info((j,i), kld, (j + 0.5) * delta + (min_val - delta), (i + 0.5) * delta + (min_val - delta))
                 klds[(j, i)] = kld
 
         return klds
@@ -177,8 +177,8 @@ def QuantKLD(network, layer, dataset, is_weights=False):
 
         threshold_min = (min_bin) * delta + (min_data)
         threshold_max = (max_bin) * delta + (min_data)
-        logging.debug('Min data', 'idx', threshold_min)
-        logging.debug('Max data', 'idx', threshold_max)
+        logging.info('Min data', 'idx', threshold_min)
+        logging.info('Max data', 'idx', threshold_max)
 
         return (threshold_min, threshold_max)
 
@@ -211,4 +211,4 @@ def quant_func_byname(name):
 
 def available_quant():
 	for item in quant_func_name_dict:
-		logging.debug(item)
+		logging.info(item)
