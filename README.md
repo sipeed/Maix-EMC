@@ -23,7 +23,7 @@ install TensorLayer, version above 2.0.1: https://github.com/tensorlayer/tensorl
 ### usage
 Refer to example/cifar
 
-prepare some pics for quant, put into cifar_dataset floder
+prepare some pics for quant, put into cifar_dataset folder
 
 prepare the model you need convert to kmodel: cifar10.h5
 
@@ -65,7 +65,7 @@ Their result is close, but still need optimize quant.
 add your Layer class in edge_layer.py
 
 ## How to add new platform support
-make new floder like 'stm32', and write stm32_constant.py,  stm32_layer.py(optimize  ops for stm32 layers), stm32_xxxmodel_bin.py.
+make new folder like 'stm32', and write stm32_constant.py,  stm32_layer.py(optimize  ops for stm32 layers), stm32_xxxmodel_bin.py.
 
 ## Files Description
 ### edge_model.py
