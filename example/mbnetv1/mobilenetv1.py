@@ -55,10 +55,23 @@ def restore_params(network, alpha, path='models'):
     #    expected_bytes=25600116
     #)  # ls -al
     filename = "mbnetv1_"+str(alpha)+".npz"
-    params = load_npz(name=os.path.join(path, filename))
+    params = load_npz(name=os.path.join(path, filename))  
+    
     for idx, net_weight in enumerate(network.all_weights):
         if 'batchnorm' in net_weight.name:
             params[idx] = params[idx].reshape(1, 1, 1, -1)
+    # exchange batchnorm's beta and gmma (TL and keras is different)
+    idx = 0
+    while idx < len(network.all_weights):
+        net_weight = network.all_weights[idx]
+        if ('batchnorm' in net_weight.name) and ('beta' in net_weight.name):
+            tmp = params[idx]
+            params[idx] = params[idx+1]
+            params[idx+1] = tmp
+            idx += 2
+        else:
+            idx += 1
+            
     assign_weights(params[:len(network.all_weights)], network)
     del params
 

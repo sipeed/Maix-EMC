@@ -15,6 +15,6 @@ from keras.optimizers import Adam
 from keras.utils import multi_gpu_model
 
 
-base_model=keras.applications.mobilenet.MobileNet(input_shape=(224, 224, 3), alpha = 0.75,depth_multiplier = 1, dropout = 0.001, pooling='avg',include_top = True, weights = "imagenet", classes = 1000)
+base_model=keras.applications.mobilenet.MobileNet(input_shape=(224, 224, 3), alpha = 1.0,depth_multiplier = 1, dropout = 0.001, pooling='avg',include_top = True, weights = "imagenet", classes = 1000)
 params = np.array(base_model.get_weights())
-np.savez('mbnetv1_10.75.npz', params=params)
+np.savez('mbnetv1_1.0.npz', params=params)
