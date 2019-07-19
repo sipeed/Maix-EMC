@@ -18,6 +18,7 @@ It is because K210 only have ~5MB ram for model in C environment, ~3.5MB ram in 
 We use the weights data from **keras**.
 Save_keras_weight.py will save keras mobilenet weights into npz file, store in 'params'.
 You can choose your alpha value to get different model size.
+
 |  alpha   |  size(MB)   |  Top-1 Accuracy | Top-5 Accuracy |
 | --- | --- | --- | ---|
 |  1.0   |  4.24   | 70.9 | 89.9 |
@@ -113,7 +114,9 @@ a = kpu.deinit(task)
 
 ~~~
 
-[![image](https://bbs.sipeed.com/uploads/default/optimized/1X/a9329fc053909faca7f34d2500f4f5ec2d576e50_2_668x500.jpeg)
+![image](https://bbs.sipeed.com/uploads/default/optimized/1X/a9329fc053909faca7f34d2500f4f5ec2d576e50_2_668x500.jpeg)  
+
+
 Video:
 [https://www.bilibili.com/video/av46664014](https://www.bilibili.com/video/av46664014)
 
