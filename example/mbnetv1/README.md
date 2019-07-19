@@ -1,23 +1,24 @@
 # Maix-EMC Convert  MobileNetV1 Model
-This example explain how to convert TL's mobilenet model to K210's kmodel, and run it on MaixPy environment.
+This example introduces the way to convert TL's mobilenet model to K210's kmodel, and run it on the MaixPy environment.
 
 ## Model network modify
-mobilenetv1.py is adjusted from tensorlayer's file:
+`mobilenetv1.py` is modified from tensorlayer's file:
+
 ```
 /usr/local/lib/python3.6/dist-packages/tensorlayer/models/mobilenetv1.py
 ```
-we change two things:
+we modified two things:
 1. TF's default padding is right-bottom, K210 only support  zero around padding, 
-so we need manual add ZeroPad2d Layer before conv layer which stride=(2,2)
-**Note:** after this adjust, we should retrain the network, while I tested the result, orignal weights data still have same result of top5, and top1 probability changed less then 3%, so we skip the retrain step at the moment.
-2. orignal TL's model don't support alpha param(default 1.0), we add it on. 
-It is because K210 only have ~5MB ram for model in C environment, ~3.5MB ram in micropython environment.  
+so we need manually add ZeroPad2d Layer before conv layer which stride=(2,2)
+**Note:** after this adjustment, we should retrain the network, while I tested the result, orignal weights data still have same result of top5, and top1 probability changed less than 3%, so we skip the retrain step at the moment.
+2. original TL's model doesn't support alpha param(default 1.0), we add it on. 
+It is because K210 only have ~5MB ram for a model in C environment, ~3.5MB ram in micropython environment.  
 1.0 version cost 4.2MB memory, not suit for micropython, so we choose 0.75 version, it takes about 2.7MB.
 
 ## Get model  weight file
 We use the weights data from **keras**.
-Save_keras_weight.py will save keras mobilenet weights into npz file, store in 'params'.
-You can choose your alpha value to get different model size.
+Save_keras_weight.py will save keras mobilenet weights into npz file, store in 'params.'
+You can choose your alpha value to get the different model size.
 
 |  alpha   |  size(MB)   |  Top-1 Accuracy | Top-5 Accuracy |
 | --- | --- | --- | ---|
@@ -69,15 +70,15 @@ The **firmware download tool**:
 ### Burn kmodel
 And you can burn the **kmodel** you have generate before:  mbnetv1.kfpkg.
 kfpkg is the file zip kmodel and flash-list.json, used by kflash_gui.
-flash-list.json indicate the kmodel address in flash, choose postion in 0x200000~0xa00000  (2~10MB offset)
-We defaultly use 0x200000.
+flash-list.json indicate the kmodel address in a flash, choose position in 0x200000~0xa00000  (2~10MB offset)
+We default use 0x200000.
 
 ### Add label text
 In addition, we need label list to identify number to 1000 class name.
 Put labels.txt into MicroSD or Flash's filesystem.
 
 ### Run MobileNet on MaixPy!
-Open terminal of Serial port(use minicom or somthing),  Press Ctrl+E goto paste mode, and Press Ctrl+D to run the code.
+Open the terminal of Serial port (use minicom or somthing),  press Ctrl+E goto paste mode, and Press Ctrl+D to run the code.
 Or use our MaixPy IDE:
 [http://dl.sipeed.com/MAIX/MaixPy/ide/](http://dl.sipeed.com/MAIX/MaixPy/ide/)
 
@@ -105,8 +106,8 @@ while(True):
     fmap = kpu.forward(task, img)
     fps=clock.fps()
     plist=fmap[:]
-    pmax=max(plist)	
-    max_index=plist.index(pmax)	
+    pmax=max(plist)    
+    max_index=plist.index(pmax)    
     a = lcd.display(img, oft=(0,0))
     lcd.draw_string(0, 224, "%.2f:%s                            "%(pmax, labels[max_index].strip()))
     print(fps)
@@ -121,5 +122,5 @@ Video:
 [https://www.bilibili.com/video/av46664014](https://www.bilibili.com/video/av46664014)
 
 We can see it identify husky picture correctly~  
-And we can see fps in serial terminal is about 26fps.  
+And we can see fps in the serial terminal is about 26fps.  
 You can make it faster by boost CPU and KPU freq.  
