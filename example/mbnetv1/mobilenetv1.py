@@ -21,24 +21,26 @@ layer_names = [
 n_filters = [32, 64, 128, 128, 256, 256, 512, 512, 512, 512, 512, 512, 1024, 1024]
 
 
-def conv_block(n, n_filter, filter_size=(3, 3), strides=(1, 1), name='conv_block'):
+def conv_block(n, n_filter, alpha, filter_size=(3, 3), strides=(1, 1), name='conv_block'):
     # ref: https://github.com/keras-team/keras/blob/master/keras/applications/mobilenet.py
     if strides != (1, 1):
         n = ZeroPad2d(padding=((1, 1), (1, 1)), name=name + '.pad')(n)
         padding_type = 'VALID'
     else:
         padding_type = 'SAME'
+    n_filter = int(n_filter*alpha)
     n = Conv2d(n_filter, filter_size, strides, padding=padding_type, b_init=None, name=name + '.conv')(n)
     n = BatchNorm(decay=0.99, act=tf.nn.relu6, name=name + '.batchnorm')(n)
     return n
 
 
-def depthwise_conv_block(n, n_filter, strides=(1, 1), name="depth_block"):
+def depthwise_conv_block(n, n_filter, alpha, strides=(1, 1), name="depth_block"):
     if strides != (1, 1):
         n = ZeroPad2d(padding=((1, 1), (1, 1)), name=name + '.pad')(n)
         padding_type = 'VALID'
     else:
         padding_type = 'SAME'
+    n_filter = int(n_filter*alpha)
     n = DepthwiseConv2d((3, 3), strides, padding=padding_type, b_init=None, name=name + '.depthwise')(n)
     n = BatchNorm(decay=0.99, act=tf.nn.relu6, name=name + '.batchnorm1')(n)
     n = Conv2d(n_filter, (1, 1), (1, 1), b_init=None, name=name + '.conv')(n)
@@ -46,13 +48,14 @@ def depthwise_conv_block(n, n_filter, strides=(1, 1), name="depth_block"):
     return n
 
 
-def restore_params(network, path='models'):
+def restore_params(network, alpha, path='models'):
     logging.info("Restore pre-trained parameters")
-    maybe_download_and_extract(
-        'mobilenet.npz', path, 'https://github.com/tensorlayer/pretrained-models/raw/master/models/',
-        expected_bytes=25600116
-    )  # ls -al
-    params = load_npz(name=os.path.join(path, 'mobilenet.npz'))
+    #maybe_download_and_extract(
+    #    'mobilenet.npz', path, 'https://github.com/tensorlayer/pretrained-models/raw/master/models/',
+    #    expected_bytes=25600116
+    #)  # ls -al
+    filename = "mbnetv1_"+str(alpha)+".npz"
+    params = load_npz(name=os.path.join(path, filename))
     for idx, net_weight in enumerate(network.all_weights):
         if 'batchnorm' in net_weight.name:
             params[idx] = params[idx].reshape(1, 1, 1, -1)
@@ -60,7 +63,7 @@ def restore_params(network, path='models'):
     del params
 
 
-def MobileNetV1(pretrained=False, end_with='out', name=None):
+def MobileNetV1(pretrained=False, end_with='out', name=None, alpha=0.75):
     """Pre-trained MobileNetV1 model (static mode). Input shape [?, 224, 224, 3], value range [0, 1].
 
     Parameters
@@ -100,21 +103,25 @@ def MobileNetV1(pretrained=False, end_with='out', name=None):
         static MobileNetV1.
     """
     ni = Input([None, 224, 224, 3], name="input")
+    if alpha not in [0.25, 0.50, 0.75, 1.0]:
+        raise ValueError('If imagenet weights are being loaded, '
+                         'alpha can be one of'
+                         '`0.25`, `0.50`, `0.75` or `1.0` only.')
 
     for i in range(len(layer_names)):
         if i == 0:
-            n = conv_block(ni, n_filters[i], strides=(2, 2), name=layer_names[i])
+            n = conv_block(ni, n_filters[i], alpha, strides=(2, 2), name=layer_names[i])
         elif layer_names[i] in ['depth2', 'depth4', 'depth6', 'depth12']:
-            n = depthwise_conv_block(n, n_filters[i], strides=(2, 2), name=layer_names[i])
+            n = depthwise_conv_block(n, n_filters[i], alpha, strides=(2, 2), name=layer_names[i])
         elif layer_names[i] == 'globalmeanpool':
             n = GlobalMeanPool2d(name='globalmeanpool')(n)
         elif layer_names[i] == 'reshape':
-            n = Reshape([-1, 1, 1, 1024], name='reshape')(n)
+            n = Reshape([-1, 1, 1, int(1024*alpha)], name='reshape')(n)
         elif layer_names[i] == 'out':
             n = Conv2d(1000, (1, 1), (1, 1), name='out')(n)
             n = Flatten(name='flatten')(n)
         else:
-            n = depthwise_conv_block(n, n_filters[i], name=layer_names[i])
+            n = depthwise_conv_block(n, n_filters[i], alpha, name=layer_names[i])
 
         if layer_names[i] == end_with:
             break
@@ -122,6 +129,6 @@ def MobileNetV1(pretrained=False, end_with='out', name=None):
     network = Model(inputs=ni, outputs=n, name=name)
 
     if pretrained:
-        restore_params(network)
+        restore_params(network, alpha)
 
     return network

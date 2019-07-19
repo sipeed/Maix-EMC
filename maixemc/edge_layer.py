@@ -126,10 +126,17 @@ class DeQuant_Layer:
         shape           = layer._nodes[0].out_tensors[0].shape
         self.count      = get_tensor_size(shape)
         
+        if (self.count > 256*1024):
+            logging.warn("output>1MB data, we assume it is dbg usage, cut to 1MB")
+            self.count = 256*1024
+        
         minv, maxv, _   = quant_func(network, layer, dataset)
         self.scale, self.bias = min_max_to_scale_bias(minv, maxv)
         self.memsize    = self.count*(4+1)
         self.outsize    = self.count*4
+
+        
+        
         logging.info("###dequant layer: count=%d, sclale=%f, bias=%f"%(self.count,self.scale,self.bias))
     def to_kmodel(self, arg_oft, eight_bit_mode, buf_map):
         logging.info(buf_map)
@@ -156,6 +163,7 @@ def gen_dequant_layer(network, idx, tl_type_list, meta_info):
     if meta_info['is_quant'] == False:
         raise RuntimeError("not support float gen_dequant_layer yet !")
     else:   #quant
+        meta_info['is_quant'] = False
         el_layer = DeQuant_Layer(network, idx, meta_info['quant_func'], meta_info['dataset'])
         return [el_layer], meta_info
 
@@ -473,6 +481,47 @@ def gen_upload_layer(network, idx, tl_type_list, meta_info):
     else:   #quant
         raise RuntimeError("only support upload quant data to ai ram!")
 
+
+################################################################################
+class SoftMax_Layer:
+    def __init__(self, network, idx):
+        logging.info("### init Upload_Layer")
+        #KLA_LINEAR = 0,KLA_RELU = 1,KLA_RELU6 = 2 
+        self.type           = EL_SOFTMAX
+        self.typename       = "EL_SOFTMAX"
+        layer = network.all_layers[idx]
+        shape = layer._nodes[0].out_tensors[0].shape.as_list()
+        if len(shape)      != 2:
+            raise RuntimeError("only support 1-D softmax now!")
+        self.channels       = shape[1]
+        self.memsize        = self.channels*4*2
+        self.outsize        = self.channels*4
+        logging.info("SoftMax: channels=%d"%(self.channels))
+    def to_kmodel(self, arg_oft, eight_bit_mode, buf_map):
+        cparser = cstruct.cstruct()
+        cparser.load(kmodel_def)
+        layer_header = cparser.kpu_model_layer_header_t()
+        layer_body = cparser.kpu_model_softmax_layer_argument_t()    
+        # fill layer body
+        layer_body.flags                = 0
+        buf_map, layer_body.main_mem_in_address, layer_body.main_mem_out_address = \
+                                        cal_in_out_addr(buf_map, self.outsize)     
+        layer_body.channels             =self.channels     
+        # fill header
+        layer_header.type               = self.type
+        layer_header.body_size          = len(layer_body)
+
+        return layer_header, layer_body.dumps(), buf_map, (0, 0)
+
+def gen_softmax_layer(network, idx, tl_type_list, meta_info):
+    meta_info['is_inai'] = True   #not in ai ram now
+    if meta_info['is_quant']:
+        raise RuntimeError("only support float data softmax now!")
+    else:   #quant
+        softmax_layer = SoftMax_Layer(network, idx)
+        return [softmax_layer], meta_info
+
+
 ################################################################################
 class Quant_Conv_Layer:
     def __init__(self, network, idx, tl_type_list, meta_info):
@@ -568,8 +617,6 @@ def gen_requant_layer(network, idx, tl_type_list, meta_info):
     raise RuntimeError("not support gen_requant_layer yet !")
 def gen_l2norm_layer(network, idx, tl_type_list, meta_info):
     raise RuntimeError("not support gen_l2norm_layer yet !")
-def gen_softmax_layer(network, idx, tl_type_list, meta_info):
-    raise RuntimeError("not support gen_softmax_layer yet !")
 def gen_concat_layer(network, idx, tl_type_list, meta_info):
     raise RuntimeError("not support gen_concat_layer yet !")
 def gen_quant_concat_layer(network, idx, tl_type_list, meta_info):

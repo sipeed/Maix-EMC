@@ -177,8 +177,8 @@ def QuantKLD(network, layer, dataset, is_weights=False):
 
         threshold_min = (min_bin) * delta + (min_data)
         threshold_max = (max_bin) * delta + (min_data)
-        logging.info('Min data', 'idx', threshold_min)
-        logging.info('Max data', 'idx', threshold_max)
+        logging.info('Min data(threshold_min): %f'%threshold_min)
+        logging.info('Max data(threshold_max): %f'%threshold_max)
 
         return (threshold_min, threshold_max)
 

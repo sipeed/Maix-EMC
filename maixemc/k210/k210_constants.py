@@ -218,4 +218,11 @@ typedef struct
     uint32 out_channels;
     uint32 act;
 } kpu_model_fully_connected_layer_argument_t;
+typedef struct
+{
+    uint32 flags;
+    uint32 main_mem_in_address;
+    uint32 main_mem_out_address;
+    uint32 channels;
+} kpu_model_softmax_layer_argument_t;
 """

@@ -432,11 +432,19 @@ class K210Conv:
         shr_x, arg_x = pow_next_log_of_2(bw_div_sw, 24)
         shr_w, arg_w = pow_next_log_of_2(bx_div_sx, 24)
         arg_add = kernel_size * kernel_size * bw_div_sw * bx_div_sx
-        pad_value = -bx_div_sx
+        pad_value = 0 -bx_div_sx
         swsx = scale_w * scale_x
+
+        logging.debug("---- Doing conv quant ----")
+        logging.debug("quant X: bias %f, range %f ---> bias %f, scale %f"% \
+            (self.x_bias, self.x_range, bias_x, scale_x))
+        
+        
+        #bias_x=%f, scale_x=%f, bw_div_sw=%f, shr_x=%d, arg_x=%d"%(bias_x, scale_x, bw_div_sw, shr_x, arg_x))
 
         weight_q = ((weights - bias_w) / scale_w).transpose([3, 2, 0, 1])
         para_start_addr = [int(round(item)) for item in np.reshape(weight_q, (np.product(weight_q.shape),))]
+        #print(para_start_addr)
 
         return {
             'swsx': swsx,
@@ -813,6 +821,8 @@ class K210_Conv_Layer:
         layer_header.body_size = len(layer_bin)
         
         logging.info("###K210 Conv Layer @0x%x"%arg_oft)
+        if layer.flags :
+            logging.info("output en, main_mem_out_address = 0x%x"%(layer.main_mem_out_address))
         logging.info("layer_offset=0x%x, weights_offset=0x%x, bn_offset=0x%x, act_offset=0x%x"%(layer.layer_offset, layer.weights_offset, layer.bn_offset, layer.act_offset))
         
         return layer_header, layer_bin, buf_map, (output_scale, output_bias)
@@ -827,89 +837,6 @@ class K210_Upload_Layer:
         self.width      = shape[1]
         self.height     = shape[2]
         self.channel    = shape[3]
-
-
-def k210_layer_post_fix(kl_args):
-    def fix_dw_with_stride2(kl_args):
-        def expand_wh(shape_):
-            shape_1 = shape_[1] * 2
-            shape_2 = shape_[2] * 2
-            return [shape_[0], shape_1, shape_2, shape_[3]]
-
-        lack_of_left_pooling = False
-        input_shape, conv_shape, output_shape = kl_args['ico_shapes']
-        conv_weights, conv_isdw = kl_args['conv_weights_isdw']
-        pool_type_size_stride = kl_args['pool_type_size_stride']
-        kl_args_fixed = dict(kl_args)
-
-        conv_kernel_size = int(conv_weights.shape[0])
-        conv_stride = int((int(input_shape[2]) + 1) / int(conv_shape[2]))
-
-        if lack_of_left_pooling:
-            if not conv_isdw and conv_kernel_size == 1 and pool_type_size_stride is None:
-                # fix in current layer
-                input_shape = expand_wh(input_shape)
-                conv_shape = expand_wh(conv_shape)
-                lack_of_left_pooling = False
-                kl_args_fixed['pool_type_size_stride'] = ['leftPool', 2, 2]
-                kl_args_fixed['ico_shapes'] = [input_shape, conv_shape, output_shape]
-            else:
-                if not (conv_kernel_size == 1 and pool_type_size_stride is None):
-                    raise ValueError(
-                        'run fix_dw_with_strde2 failed. ' +
-                        'can not delay left_pooling over current layer, ' +
-                        'current layer conv_kernel_size:{}, pool_type_size_stride:{}' \
-                        .format(conv_kernel_size, pool_type_size_stride)
-                    )
-
-                # delay fix in after layers
-                input_shape = expand_wh(input_shape)
-                conv_shape = expand_wh(conv_shape)
-                output_shape = expand_wh(output_shape)
-                kl_args_fixed['ico_shapes'] = [input_shape, conv_shape, output_shape]
-
-        if conv_stride == 2:
-            if not conv_isdw:
-                if pool_type_size_stride is None:
-                    # fix in current layer
-                    conv_shape = expand_wh(conv_shape)
-                    kl_args_fixed['pool_type_size_stride'] = ['leftPool', 2, 2]
-                    kl_args_fixed['ico_shapes'] = [input_shape, conv_shape, output_shape]
-                else:
-                    # fix later
-                    lack_of_left_pooling = True
-                    conv_shape = expand_wh(conv_shape)
-                    output_shape = expand_wh(output_shape)
-                    kl_args_fixed['ico_shapes'] = [input_shape, conv_shape, output_shape]
-            else:
-                # dw layer needs to fix it later
-                lack_of_left_pooling = True
-                conv_shape = expand_wh(conv_shape)
-                output_shape = expand_wh(output_shape)
-                kl_args_fixed['ico_shapes'] = [input_shape, conv_shape, output_shape]
-
-        if lack_of_left_pooling:
-            raise ValueError('run fix_dw_with_strde2 failed. no more layers for fix.')
-        return kl_args_fixed
-
-    def fix_wh_leas_than_4(kl_args):
-        def force_pad_to_4(shape_):
-            return [shape_[0], 4, 4, shape_[3]]
-
-        input_shape, conv_shape, output_shape = kl_args['ico_shapes']
-        kl_args_fixed = dict(kl_args)
-
-        if input_shape[1] < 4 or conv_shape[1] < 4 or output_shape[1] < 4:
-            input_shape = force_pad_to_4(input_shape)
-            conv_shape = force_pad_to_4(conv_shape)
-            output_shape = force_pad_to_4(output_shape)
-            kl_args_fixed['ico_shapes'] = [input_shape, conv_shape, output_shape]
-
-        return kl_args_fixed
-
-    kl_args = fix_wh_leas_than_4(kl_args)
-    #kl_args_ = fix_dw_with_stride2(kl_args)    #TODO
-    return kl_args
     
     
 ################################################################################
@@ -989,19 +916,28 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
     layer_list = []
     layers = network.all_layers  
     
+    logging.debug("gen k210 conv layer from tl_type_list: {}".format(tl_type_list))
+    
     #check if the padding is right
     if (tl_type_list[0] == 'ZeroPad2d'):    
         zeropad_layer = layers[idx]
         if zeropad_layer.layer_args['padding'] != ((1, 1), (1, 1)):
             raise ValueError('K210 assume use ((1, 1), (1, 1)) zero padding!' )
-        idx += 1                        # skip the padding layer
-        conv_layer = layers[idx]
+        #idx += 1                        # skip the padding layer
+        conv_layer = layers[idx+1]
         padding = conv_layer.layer_args['padding'] 
         strides = conv_layer.layer_args['strides'] 
         if padding != 'VALID':
             raise ValueError("K210 assume conv layer after zeropad use padding = 'VALID'" )
         if strides != (2, 2):
             raise ValueError("K210 assume conv layer after zeropad use strides = (2,2)" )
+        
+        if len(tl_type_list)>2 :
+            bn_layer = layers[idx+2]
+        else:
+            bn_layer = None
+            
+        conv_isdw = (tl_type_list[1] == 'DepthwiseConv2d')  
     else:
         conv_layer = layers[idx]
         padding = conv_layer.layer_args['padding'] 
@@ -1009,10 +945,13 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
         if strides != (1, 1):
             raise ValueError("K210 assume conv layer which stride > (1,1) use ZeroPad2d ahead " )
         
-    if len(tl_type_list)>1 :
-        bn_layer = layers[idx+1]
-    else:
-        bn_layer = None
+        if len(tl_type_list)>1 :
+            bn_layer = layers[idx+1]
+        else:
+            bn_layer = None
+            
+        conv_isdw = (tl_type_list[0] == 'DepthwiseConv2d')  
+
     # valid parm check
     if conv_layer.layer_args['dilation_rate'] != (1,1):
         raise ValueError('only support (1,1) dilation_rate!')
@@ -1028,9 +967,11 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
     input_shape = conv_layer._nodes[0].in_tensors[0].shape
     conved_shape = conv_layer._nodes[0].out_tensors[0].shape
     output_shape = conved_shape
-    
+    input_shape = input_shape.as_list()
+    conved_shape = conved_shape.as_list()
+    output_shape = output_shape.as_list()
+
     if (tl_type_list[0] == 'ZeroPad2d'):    #strip 
-        input_shape = input_shape.as_list()
         input_shape[1] -= 2
         input_shape[2] -= 2
     
@@ -1044,20 +985,22 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
         logging.info("too small conv, padding it first!")
         small_conv_flag = 1
         addpadding_layer = AddPadding_Layer(network, idx, tl_type_list, meta_info)
-        input_shape0 = input_shape
-        input_shape = input_shape.as_list()
         if input_shape[1] < 4:
             input_shape[1] = 4
+            conved_shape[1] = 4
+            output_shape[1] = 4
         if input_shape[2] < 4:
             input_shape[2] = 4
-        
+            conved_shape[2] = 4
+            output_shape[2] = 4
+            
     conv_weights = conv_layer.all_weights[0].numpy()
     if hasattr(conv_layer, 'b'):
         conv_bias = conv_layer.b.numpy()
     else:
         conv_bias = 0
     weights_min, weights_max, _ = meta_info['quant_func'](network, conv_layer, meta_info['dataset'], is_weights=True)
-    conv_isdw = (tl_type_list[0] == 'DepthwiseConv2d')  
+    
     
     # Pool in Conv Layer
     stride = conv_layer.layer_args['strides'] 
@@ -1140,7 +1083,7 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
         'eight_bit_mode': eight_bit_mode,
     }
     # fix some critical condition
-    kl_args_fixed = k210_layer_post_fix(kl_args)
+    # kl_args_fixed = k210_layer_post_fix(kl_args)
     
     # logging.info layer info
     output_min = act_min_y
@@ -1172,7 +1115,7 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
         meta_info['conv_idx']   = 0
         meta_info['is_inai']    = False
         meta_info['last_min']   = act_min_y
-        meta_info['last_min']   = act_max_y
+        meta_info['last_max']   = act_max_y
     else:   #k210 
         if meta_info['is_inai'] == False:  #not in ai ram, we need upload it first
             upload_layer = Upload_Layer(network, idx-1)
@@ -1181,12 +1124,98 @@ def gen_k210_conv_layer(network, idx, tl_type_list, meta_info):
             meta_info['conv_idx']   = 0
             meta_info['is_inai']    = True
             meta_info['last_min']   = act_min_y
-            meta_info['last_min']   = act_max_y
+            meta_info['last_max']   = act_max_y
         else:   #in ai ram already
             layer_list.append(kconv_layer)
             meta_info['conv_idx']   += 1
             meta_info['is_inai']    = True
             meta_info['last_min']   = act_min_y
-            meta_info['last_min']   = act_max_y
+            meta_info['last_max']   = act_max_y
             
     return layer_list, meta_info
+
+
+def k210_layer_post_fix(el_list):
+    def expand_wh(shape_):
+        shape_1 = shape_[1] * 2
+        shape_2 = shape_[2] * 2
+        return [shape_[0], shape_1, shape_2, shape_[3]]
+    def fix_dw_with_strde2(el_list):
+        lack_of_left_pooling = False
+        last_is_conv = True
+        for index in range(len(el_list)):
+            el = el_list[index]
+            logging.debug("Layer %d:"%index)
+            if el.type == EL_K210_CONV :
+                conv_part = el.conv
+                pool_part = el.pool
+                input_shape = conv_part.input_shape
+                output_shape = conv_part.output_shape
+                conv_shape = output_shape
+                conv_weights = conv_part.weights
+                conv_isdw = conv_part.depth_wise_layer
+                if pool_part is not None:
+                    pool_type_size_stride = [pool_part.pool_type, pool_part.size, pool_part.stride]
+                else:
+                    pool_type_size_stride = None
+                conv_kernel_size = int(conv_weights.shape[0])
+                conv_stride = int((int(input_shape[2]) + 1) / int(conv_shape[2]))
+
+                logging.debug("conv_stride=%d, conv_isdw=%d, conv_kernel_size=%d, pool==None:%d"%(conv_stride, conv_isdw, conv_kernel_size, (pool_type_size_stride is None)))
+
+                if lack_of_left_pooling:
+                    if last_is_conv == False:
+                        raise ValueError('run fix_dw_with_strde2 failed, last not conv layer')
+                    if not conv_isdw and conv_kernel_size == 1 and pool_type_size_stride is None:
+                        # fix in current layer
+                        input_shape = expand_wh(input_shape)
+                        conv_shape = expand_wh(conv_shape)
+                        lack_of_left_pooling = False
+                        el.pool = K210Pool('leftPool', 2, 2)
+                        #el.conv.output_shape = conv_shape
+                        el.conv.input_shape = input_shape
+                        logging.debug("Fixed: in normal 1x1 conv")
+                    else:
+                        if not (conv_kernel_size == 1 and pool_type_size_stride is None):
+                            raise ValueError(
+                                'run fix_dw_with_strde2 failed. ' +
+                                'can not delay left_pooling over current layer, ' +
+                                'current layer conv_kernel_size:{}, pool_type_size_stride:{}' \
+                                .format(conv_kernel_size, pool_type_size_stride)
+                            )
+
+                        # delay fix in after layers
+                        input_shape = expand_wh(input_shape)
+                        conv_shape = expand_wh(conv_shape)
+                        output_shape = expand_wh(output_shape)
+                        el.conv.input_shape = input_shape
+                        #el.conv.output_shape = conv_shape
+                        logging.debug("Fixed: in next dw 1x1 conv")
+
+                if conv_stride == 2:
+                    if not conv_isdw:
+                        logging.debug("we have done before")
+                    else:
+                        # dw layer needs to fix it later, it is chip bug/feature
+                        lack_of_left_pooling = True
+                        el.pool = None
+                        conv_shape = expand_wh(conv_shape)
+                        output_shape = expand_wh(output_shape)
+                        el.conv.output_shape = conv_shape
+                        logging.debug("dw conv stride fix in later layer")
+                elif conv_stride != 1:
+                    raise ValueError('unsupported stride!')
+                else :
+                    logging.debug("stride == 1, nothing to do")
+            else:
+                last_is_conv = False
+                logging.debug("Not Conv Layer")
+
+        if lack_of_left_pooling:
+            raise ValueError('run fix_dw_with_strde2 failed. no more layers for fix.')
+        return 
+    
+    logging.debug("----Start fix stride----")
+    fix_dw_with_strde2(el_list)
+    logging.debug("----End fix stride----")
+    return 
