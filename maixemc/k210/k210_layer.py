@@ -53,22 +53,19 @@ def min_max_to_scale_bias(minv, maxv):
 #        value = value.tolist()
 #    return hex(int(round((1 << width) + value)) % (1 << width))
 
-# 3.1752e-7
-# 0.665887, -21
-# 35, 10909
-# 3.1752e-7 = 10909>>35
 def pow_next_log_of_2_no_round(value, bound_shift, shift_max_shift=4):
-    mul, shift = np.frexp(np.abs(value))
-    ret = bound_shift - 1 - shift
-    mul = np.sign(value) * mul * np.power(2, bound_shift - 1)
+    mul, shift = np.frexp(np.abs(value))    # value = mul(0~1)*(1 << shift)
+    ret = bound_shift - 1 - shift           # shift to full bound_shift
+    mul = np.sign(value) * mul * np.power(2, bound_shift - 1)   # scale mul
+    # value = mul>>ret
     return ret, mul
 
 def pow_next_log_of_2(value, bound_shift, shift_max_shift=4):
-    ret = 0
+    ret = 0     #limit shr < shift_max_shift
     shift_max = 1 << shift_max_shift
     while value >= -(1 << (bound_shift - 2)) and value < (1 << (bound_shift - 2)) \
             and value != 0 and ret < (shift_max - 1):
-        value = value * 2
+        value = value * 2   
         ret = ret + 1
     return ret, value
     
@@ -429,18 +426,17 @@ class K210Conv:
         bx_div_sx = bias_x / scale_x
         bw_div_sw = bias_w / scale_w
 
-        shr_x, arg_x = pow_next_log_of_2(bw_div_sw, 24)
-        shr_w, arg_w = pow_next_log_of_2(bx_div_sx, 24)
+        shr_x, arg_x = pow_next_log_of_2(bw_div_sw, 24) #bw_div_sw = arg_x >> shr_x
+        shr_w, arg_w = pow_next_log_of_2(bx_div_sx, 24) #bx_div_sx = arg_w >> shr_w
         arg_add = kernel_size * kernel_size * bw_div_sw * bx_div_sx
         pad_value = 0 -bx_div_sx
         swsx = scale_w * scale_x
 
-        logging.debug("---- Doing conv quant ----")
+        logging.debug("---- Doing conv quant  x = xq*scale_x + bias_x ----")
         logging.debug("quant X: bias %f, range %f ---> bias %f, scale %f"% \
             (self.x_bias, self.x_range, bias_x, scale_x))
-        
-        
-        #bias_x=%f, scale_x=%f, bw_div_sw=%f, shr_x=%d, arg_x=%d"%(bias_x, scale_x, bw_div_sw, shr_x, arg_x))
+        logging.debug("quant W: bias %f, range %f ---> bias %f, scale %f"% \
+            (self.w_bias, self.w_range, bias_w, scale_w))
 
         weight_q = ((weights - bias_w) / scale_w).transpose([3, 2, 0, 1])
         para_start_addr = [int(round(item)) for item in np.reshape(weight_q, (np.product(weight_q.shape),))]
@@ -511,17 +507,17 @@ class K210BN:
         # here is total shift and mul, we divide them into bn and act's shift
         # 35, 10909.xx   float_res = int_res*10909.xx>>35
         # pow_next_log_of_2_no_round, split swsxsb to out_mul and out_shift(which>=15)
-        out_shift, out_mul = pow_next_log_of_2_no_round(swsxsb, 15)
+        out_shift, out_mul = pow_next_log_of_2_no_round(swsxsb, 15) # out_mul>>out_shift
         # fixed 15bit shift for bn
         bn_shift = 15
         act_shift = out_shift - bn_shift
         # split float out_mul to int out_mul and 2 power
         # float_res = int_res*post_scale>>act_shift >>bn_shift 
-        post_scale = out_mul / np.round(out_mul) * np.power(2, act_shift)
+        post_scale = np.round(out_mul)/out_mul * np.power(2, act_shift)
         #logging.info("act_shift=%d, post_scale=%f"%(act_shift,post_scale))
 
         # scale scale to 0~255, and then* out_mul, >> 15, next step will /post_scale
-        scale = (scale / sb * out_mul).round().astype('int32')
+        scale = (scale / sb * np.round(out_mul)).round().astype('int32')
         # bias have no extra scale, so just ( post_scale, then next step/post_scale
         bias = (bias * post_scale).round().astype('int32')
         load_para = 1

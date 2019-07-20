@@ -153,30 +153,18 @@ def MobileNetV1(pretrained=False, end_with='out', name=None, alpha=0.75):
     
 #17 total
 print("total %d layers"%len(layer_names_all))
-tl.logging.set_verbosity(tl.logging.INFO)
+tl.logging.set_verbosity(tl.logging.DEBUG)
 dbg_layer_idx = len(layer_names_all) #4
 full = True
 
-alpha=0.5
+alpha=0.75
 layer_names = layer_names_all[:dbg_layer_idx]
 mobilenetv1 = MobileNetV1(pretrained=True, alpha=alpha)
-emc.save_kmodel(mobilenetv1, './mbnetv1.kmodel', './mbnetv1_dataset', dataset_func='img_0_1', quant_func='kld', quant_bit=8, version=3, sm_flag=True)
+emc.save_kmodel(mobilenetv1, './mbnetv1.kmodel', './mbnetv1_dataset', dataset_func='img_0_1', quant_func='minmax', quant_bit=8, version=3, sm_flag=True)
 os.system('zip mbnetv1.kfpkg mbnetv1.kmodel flash-list.json')
 
 np.set_printoptions(suppress=True)
 np.set_printoptions(threshold=100000)
-
-img1 = tl.vis.read_image('mbnetv1_dataset/black.bmp')
-img1 = tl.prepro.imresize(img1, (224, 224)) / 255
-img1 = img1.astype(np.float32)[np.newaxis, ...]
-mobilenetv1.eval()
-output = mobilenetv1(img1).numpy()
-#print(output.shape)
-#print(output)
-#print(output[0][0][0])
-#output = output.swapaxes(1,3)
-#output = output.swapaxes(2,3)
-#print(output[0][1])
 
 
 img1 = tl.vis.read_image('mbnetv1_dataset/tiger224.bmp')
