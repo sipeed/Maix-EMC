@@ -2,7 +2,7 @@
   "version": "0.1.0",
   "files": [
     {
-      "address": 0x200000,
+      "address": 0xa00000,
       "bin": "mbnetv1.kmodel",
       "sha256Prefix": false
     }

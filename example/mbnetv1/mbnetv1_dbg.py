@@ -48,8 +48,9 @@ def depthwise_conv_block(n, n_filter, alpha, strides=(1, 1), name="depth_block")
     n_filter = int(n_filter*alpha)
     n = DepthwiseConv2d((3, 3), strides, padding=padding_type, b_init=None, name=name + '.depthwise')(n)
     n = BatchNorm(decay=0.99, act=tf.nn.relu6, name=name + '.batchnorm1')(n)
-    n = Conv2d(n_filter, (1, 1), (1, 1), b_init=None, name=name + '.conv')(n)
-    n = BatchNorm(decay=0.99, act=tf.nn.relu6, name=name + '.batchnorm2')(n)
+    if full == True:
+        n = Conv2d(n_filter, (1, 1), (1, 1), b_init=None, name=name + '.conv')(n)
+        n = BatchNorm(decay=0.99, act=tf.nn.relu6, name=name + '.batchnorm2')(n)
     return n
 
 
@@ -157,15 +158,15 @@ tl.logging.set_verbosity(tl.logging.DEBUG)
 dbg_layer_idx = len(layer_names_all) #4
 full = True
 
-alpha=0.75
+alpha=0.25
 layer_names = layer_names_all[:dbg_layer_idx]
-mobilenetv1 = MobileNetV1(pretrained=True, alpha=alpha)
+mobilenetv1 = MobileNetV1(pretrained=True, end_with='out' , alpha=alpha)
 emc.save_kmodel(mobilenetv1, './mbnetv1.kmodel', './mbnetv1_dataset', dataset_func='img_0_1', quant_func='minmax', quant_bit=8, version=3, sm_flag=True)
 os.system('zip mbnetv1.kfpkg mbnetv1.kmodel flash-list.json')
 
 np.set_printoptions(suppress=True)
 np.set_printoptions(threshold=100000)
-
+np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
 
 img1 = tl.vis.read_image('mbnetv1_dataset/tiger224.bmp')
 img1 = tl.prepro.imresize(img1, (224, 224)) / 255
@@ -176,10 +177,14 @@ print(output.shape)
 #print(output)
 #print(output[0][0][0])
 #output = output.swapaxes(1,3)
+#output=output.transpose([0, 3, 1, 2])
 #output = output.swapaxes(2,3)
-#print(output[0][1])
+print("===============")
+#print(output[0])
 
 prob = tf.nn.softmax(output)[0].numpy()
-preds = (np.argsort(prob)[::-1])[0:5]
-for p in preds:
-    print("%d: %f"%(p, prob[p]))
+print(prob)
+
+#preds = (np.argsort(prob)[::-1])[0:1000]
+#for p in preds:
+#    print("%d: %f"%(p, prob[p]))

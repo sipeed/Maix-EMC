@@ -135,8 +135,6 @@ class DeQuant_Layer:
         self.memsize    = self.count*(4+1)
         self.outsize    = self.count*4
 
-        
-        
         logging.info("###dequant layer: count=%d, sclale=%f, bias=%f"%(self.count,self.scale,self.bias))
     def to_kmodel(self, arg_oft, eight_bit_mode, buf_map):
         logging.info(buf_map)

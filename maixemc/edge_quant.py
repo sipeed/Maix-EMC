@@ -34,12 +34,24 @@
 import numpy as np
 from tensorlayer import logging
 
-def QuantMinMax(network, layer, dataset, is_weights=False):
+def QuantMinMax(network, layer, dataset, is_weights=False, is_chwise=False):
     if is_weights:
-        weights = layer.all_weights[0].numpy()
-        minv = weights.min()
-        maxv = weights.max()
-        return minv, maxv, weights
+        if is_chwise == False:
+            weights = layer.all_weights[0].numpy()
+            minv = weights.min()
+            maxv = weights.max()
+            return minv, maxv, weights
+        else:
+            weights = layer.all_weights[0].numpy()
+            weights = np.swapaxes(weights, 0 , -1)
+            channels = weights.shape[0]
+            minv = np.zeros(channels)
+            maxv = np.zeros(channels)
+            for i in range(channels):
+                weight = weights[i]
+                minv[i] = weight.min()
+                maxv[i] = weight.max()
+            return minv, maxv, weights
     else:
         network.eval()
         network(dataset)
