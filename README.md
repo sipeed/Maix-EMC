@@ -11,7 +11,7 @@ Maix-EMC act as **TensorLayer**（[https://github.com/tensorlayer/tensorlayer](h
 We design Maix-EMC as a easy **extendable** frame, you can easily add new layer type or new MCU or new model convertor for it, detail refer to following sections or this post: https://bbs.sipeed.com/t/topic/916
 
 
-![](https://git.kancloud.cn/repos/zepan/note/raw/f60065399babe7b3ce6fde5491b0467bc77a12ac/images/screenshot_1561694286461.png?access-token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE1NjE3NDc3MzAsImlhdCI6MTU2MTcwNDUzMCwicmVwb3NpdG9yeSI6InplcGFuXC9ub3RlIiwidXNlciI6eyJ1c2VybmFtZSI6InplcGFuIiwibmFtZSI6InplcGFuIiwiZW1haWwiOiJjYWVzYXJAamljbS5jbiIsInRva2VuIjoiMzRjNDZkODFiNzllMTI2YTgwZTIzNzJlNDc2ZjVhNDAiLCJhdXRob3JpemUiOnsicHVsbCI6dHJ1ZSwicHVzaCI6dHJ1ZSwiYWRtaW4iOnRydWV9fX0.AetIzXNoxv3rYkZPTqu1GkJAIN4ZMxRkdY7WW2QjkTQ)
+
 
 ## How to use
 ### install packages
